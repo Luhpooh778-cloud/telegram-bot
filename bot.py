@@ -5,26 +5,28 @@ from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandle
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 
 
-# ----- MENU -----
+# ---------- MENUS ----------
 
 def main_menu():
     keyboard = [
-        [
-            InlineKeyboardButton("📖 Help", callback_data="help"),
-            InlineKeyboardButton("ℹ️ Info", callback_data="info"),
-        ],
-        [
-            InlineKeyboardButton("⚙️ Settings", callback_data="settings")
-        ]
+        [InlineKeyboardButton("📞 Call Support", callback_data="call")],
+        [InlineKeyboardButton("📝 Submit Request", callback_data="ticket")],
+        [InlineKeyboardButton("📊 Service Status", callback_data="status")],
+        [InlineKeyboardButton("👨‍💼 Talk to Agent", callback_data="agent")]
     ]
     return InlineKeyboardMarkup(keyboard)
 
 
-# ----- COMMAND HANDLERS -----
+def back_menu():
+    return InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back")]])
+
+
+# ---------- COMMANDS ----------
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Welcome! Choose an option below 👇",
+        "📞 *Welcome to Our Call Center*\n\nPlease select an option below:",
+        parse_mode="Markdown",
         reply_markup=main_menu()
     )
 
@@ -33,17 +35,43 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    if query.data == "help":
-        await query.edit_message_text("📖 *Help Menu*\n\nUse the buttons to navigate.", parse_mode="Markdown")
+    if query.data == "call":
+        await query.edit_message_text(
+            "📞 *Call Support*\n\nYou can reach us at:\n\n☎️ 1-800-555-1234\n\nHours: 9AM – 6PM",
+            parse_mode="Markdown",
+            reply_markup=back_menu()
+        )
 
-    elif query.data == "info":
-        await query.edit_message_text("ℹ️ *Bot Info*\n\nThis is a demo Telegram bot.", parse_mode="Markdown")
+    elif query.data == "ticket":
+        await query.edit_message_text(
+            "📝 *Submit Request*\n\nPlease describe your issue and a support agent will contact you.",
+            parse_mode="Markdown",
+            reply_markup=back_menu()
+        )
 
-    elif query.data == "settings":
-        await query.edit_message_text("⚙️ *Settings*\n\nSettings coming soon!", parse_mode="Markdown")
+    elif query.data == "status":
+        await query.edit_message_text(
+            "📊 *Service Status*\n\n✅ All systems are currently operational.",
+            parse_mode="Markdown",
+            reply_markup=back_menu()
+        )
+
+    elif query.data == "agent":
+        await query.edit_message_text(
+            "👨‍💼 *Live Agent*\n\nAn agent will respond shortly.\n\nPlease wait...",
+            parse_mode="Markdown",
+            reply_markup=back_menu()
+        )
+
+    elif query.data == "back":
+        await query.edit_message_text(
+            "📞 *Main Menu*\n\nChoose an option below:",
+            parse_mode="Markdown",
+            reply_markup=main_menu()
+        )
 
 
-# ----- MAIN -----
+# ---------- MAIN ----------
 
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -51,7 +79,7 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
 
-    print("Bot running...")
+    print("Call center bot running...")
     app.run_polling()
 
 
