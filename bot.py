@@ -1,143 +1,85 @@
 import os
-import uuid
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+from twilio.rest import Client
 
+# --- Environment variables ---
 BOT_TOKEN = os.environ["BOT_TOKEN"]
+TWILIO_SID = os.environ["TWILIO_SID"]
+TWILIO_AUTH = os.environ["TWILIO_AUTH_TOKEN"]
+TWILIO_NUMBER = os.environ["TWILIO_PHONE_NUMBER"]
 
-# PUT YOUR TELEGRAM NUMERIC ID HERE
-ADMIN_ID = 8329734663
+# --- Twilio client ---
+twilio_client = Client(TWILIO_SID, TWILIO_AUTH)
 
-tickets = {}  # ticket_id : user_id
-
-
-# ---------- MENUS ----------
-
+# --- Bot menus ---
 def main_menu():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📝 Submit Support Ticket", callback_data="ticket")],
-        [InlineKeyboardButton("👨‍💼 Talk to Agent", callback_data="agent")],
-        [InlineKeyboardButton("📊 Service Status", callback_data="status")]
+        [InlineKeyboardButton("📞 Call a Number", callback_data="call_number")]
     ])
-
 
 def back_menu():
     return InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back")]])
 
-
-# ---------- START ----------
-
+# --- /start command ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "📞 *Welcome to Customer Support*\n\nChoose an option below:",
-        parse_mode="Markdown",
+        "🤖 Welcome to the Call Agent Bot!\n\nUse the menu below to initiate a call.",
         reply_markup=main_menu()
     )
 
-
-# ---------- BUTTON HANDLER ----------
-
+# --- Button handler ---
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    if query.data == "ticket":
+    if query.data == "call_number":
         await query.edit_message_text(
-            "📝 *Submit Your Request*\n\nSend your issue in one message.",
-            parse_mode="Markdown"
+            "📞 Send me the phone number you want me to call (format: +1234567890)",
         )
-        context.user_data["ticket_mode"] = True
-
-    elif query.data == "agent":
-        await query.edit_message_text(
-            "👨‍💼 *Live Agent*\n\nSend your message below. An agent will reply.",
-            parse_mode="Markdown"
-        )
-        context.user_data["agent_mode"] = True
-
-    elif query.data == "status":
-        await query.edit_message_text(
-            "📊 *System Status*\n\n✅ All systems operational.",
-            parse_mode="Markdown",
-            reply_markup=back_menu()
-        )
+        context.user_data["awaiting_number"] = True
 
     elif query.data == "back":
         await query.edit_message_text(
-            "📞 *Main Menu*\n\nChoose an option:",
-            parse_mode="Markdown",
+            "🤖 Main Menu",
             reply_markup=main_menu()
         )
 
-
-# ---------- MESSAGE HANDLER ----------
-
+# --- Message handler ---
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
-    text = update.message.text
+    user_message = update.message.text
 
-    # Ticket System
-    if context.user_data.get("ticket_mode"):
-        ticket_id = str(uuid.uuid4())[:8]
-        tickets[ticket_id] = user_id
-
-        await context.bot.send_message(
-            chat_id=ADMIN_ID,
-            text=f"🎫 *NEW SUPPORT TICKET*\n\nTicket ID: `{ticket_id}`\nUser ID: `{user_id}`\n\nMessage:\n{text}",
-            parse_mode="Markdown"
-        )
-
-        await update.message.reply_text(
-            f"✅ Ticket Created!\n\n🎫 Ticket ID: `{ticket_id}`\nAn agent will contact you shortly.",
-            parse_mode="Markdown",
-            reply_markup=main_menu()
-        )
-
-        context.user_data["ticket_mode"] = False
-
-    # Live Agent Chat
-    elif context.user_data.get("agent_mode"):
-        await context.bot.send_message(
-            chat_id=ADMIN_ID,
-            text=f"💬 *LIVE CHAT*\nUser ID: `{user_id}`\n\n{text}",
-            parse_mode="Markdown"
-        )
-
-    # Admin Reply Routing
-    elif user_id == ADMIN_ID and context.args:
-        ticket_id = context.args[0]
-        reply_text = " ".join(context.args[1:])
-
-        if ticket_id in tickets:
-            await context.bot.send_message(
-                chat_id=tickets[ticket_id],
-                text=f"👨‍💼 *Support Reply*\n\n{reply_text}",
-                parse_mode="Markdown"
+    # Check if user just pressed "Call a Number"
+    if context.user_data.get("awaiting_number"):
+        phone_number = user_message.strip()
+        try:
+            call = twilio_client.calls.create(
+                twiml=f'<Response><Say voice="alice">Hello! This is your automated call from the bot.</Say></Response>',
+                to=phone_number,
+                from_=TWILIO_NUMBER
             )
-            await update.message.reply_text("✅ Reply sent.")
-        else:
-            await update.message.reply_text("❌ Invalid ticket ID.")
+            await update.message.reply_text(
+                f"✅ Call initiated to {phone_number}!\nCall SID: {call.sid}",
+                reply_markup=main_menu()
+            )
+        except Exception as e:
+            await update.message.reply_text(f"❌ Failed to make call: {e}", reply_markup=main_menu())
+        finally:
+            context.user_data["awaiting_number"] = False
+    else:
+        await update.message.reply_text("Please use the menu to initiate a call.", reply_markup=main_menu())
 
-
-# ---------- ADMIN COMMAND ----------
-
-async def reply_ticket(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await message_handler(update, context)
-
-
-# ---------- MAIN ----------
-
+# --- Main ---
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
-
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("reply", reply_ticket))
-    app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
-
-    print("Professional call center bot running...")
+    app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r"\+?\d+"), message_handler))
+    app.add_handler(CommandHandler("menu", start))
+    app.add_handler(MessageHandler(filters.ALL, message_handler))
+    app.add_handler(CallbackQueryHandler(button_handler))
+    print("Call Agent Bot running...")
     app.run_polling()
-
 
 if __name__ == "__main__":
     main()
