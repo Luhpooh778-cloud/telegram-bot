@@ -2,7 +2,7 @@ import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 
-BOT_TOKEN = os.environ["BOT_TOKEN"]
+BOT_TOKEN = os.environ["8250106450:AAFkzjLhAxihUlKxPhMueaTCOY3xv9njNdM]
 
 
 # ----- MENU -----
